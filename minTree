@@ -1,0 +1,496 @@
+#include <stdio.h>
+#include <stdlib.h>
+#define MaxVertexNum 20 //顶点数设置为100
+#define INFINITY 100000
+#define maxSize 100
+#define ERROR -1
+#define minData -1
+typedef enum{false = 0,true = 1}PointTag;
+int visited[MaxVertexNum];
+typedef int weightType;
+typedef char dataType;
+/*邻接矩阵*/
+struct GNode{
+    int nv;//顶点数
+    int ne;//边数
+    weightType G[MaxVertexNum][MaxVertexNum];//邻接矩阵某条边的权值
+    dataType data[MaxVertexNum];//存顶点的数据
+};
+typedef struct GNode *MGraph;
+
+/*邻接矩阵边的定义*/
+typedef int Vertex;
+struct ENode{
+    Vertex v1,v2;
+    weightType weight;
+};
+typedef struct ENode *Edge;
+
+//邻接表的结构体
+/*邻接点的定义*/
+struct AdjvNode{
+    Vertex Adjv;//邻接点的下标
+    weightType weight;
+    struct AdjvNode *next;
+};
+typedef struct AdjvNode *PtrToAdjvNode;
+
+
+/*顶点表头结点的定义*/
+struct Vnode{
+    PtrToAdjvNode firstEdge;//边表头指针
+    dataType data;
+};
+//开辟顶点结点的数组
+typedef struct Vnode AdjList[MaxVertexNum];
+
+
+/*邻接表-图的定义*/
+struct GNode_AL{
+    int nv;
+    int ne;
+    AdjList G;//邻接表
+};
+typedef struct GNode_AL *LGraph;
+
+/*建立查并集*/
+typedef int  ElementType ;
+typedef int parentType;
+struct SetNode{
+    ElementType data;
+    parentType parent;
+};
+typedef  struct SetNode setType[MaxVertexNum+1];//后面调整，因为在寻找根节点的时候很暴力
+
+/*
+typedef Edge ElementType_stack;
+struct VENode{
+    ElementType_stack data;
+};
+typedef struct VENode VE[MaxVertexNum];*/
+/*建立最小堆*/
+typedef Edge ElementType_stack;
+struct HNode{
+    //VE data;//最小堆里边的元素是边Edge
+    ElementType_stack data[MaxVertexNum];//开辟好多好多个Edge类型的
+    int size;//堆中元素的个数
+    int capacity;//堆的最大容量
+
+};
+typedef struct HNode *minHeap;
+
+ElementType find(ElementType x,setType s[]);
+void Union(ElementType x,ElementType y,setType s[]);
+MGraph biuldGraph_matric();
+MGraph CreateGraph_matric(int nvNum);//初始化有nv个顶点但没有边的图
+void InsertEdge_matric(MGraph Graph,Edge E);//在矩阵中插入边
+LGraph biuldGraph_adjacencyList();//建立邻接表的图
+LGraph CreateGraph_adjacencyList(int nvNum);//初始化有nv个顶点但没有边的图
+void InsertEdge_adjacencyList(LGraph Graph,Edge E);//把这条边插入邻接表信息中
+LGraph Prim_matric(MGraph Graph);//最小生成树
+Vertex findMinDist_matric(MGraph Graph,weightType dist[]);
+void DFS_adjacencyList(LGraph Graph,Vertex v,void(*visit_)(Vertex));//邻接表的深度搜索
+void InitialVisted();
+void visit_(Vertex s);
+minHeap creatHeap();
+void readFromFile(minHeap H,MGraph Graph);
+void biuldMinHeap(minHeap H);
+ElementType_stack deleteMin(minHeap H);
+void sortMin(minHeap H,int i);
+void initialSet(setType s);
+LGraph Kruskal(MGraph graph,minHeap H);
+int Isclose(int x,int y,setType s);
+int main()
+{
+    int s=0,i;
+    MGraph Graph1;
+    LGraph Graph4,Graph5;
+    ElementType_stack E;
+    E=(Edge)malloc(sizeof(struct ENode));
+    Graph1=biuldGraph_matric();
+    /*Graph4=Prim_matric(Graph1);
+    DFS_adjacencyList(Graph4,s,visit_);*/
+    //创建边的权值最小堆的过程
+    minHeap H;//创建最小堆
+    H=creatHeap();
+    readFromFile(H,Graph1);
+    biuldMinHeap(H);//创建最小堆
+    Graph5=Kruskal(Graph1,H);//Kruskal生成的最小生成树
+    /*for(i=1;i<=Graph1->ne;i++){
+        E=deleteMin(H);
+        printf("%d\n",E->weight);
+    }*/
+    return 0;
+}
+
+MGraph biuldGraph_matric(){
+    MGraph Graph;
+    Edge E;
+    int nv,i;
+    //读入顶点个数
+    FILE*fp;
+     if((fp=fopen("E://数据结构//图 实验//matric1.txt","r"))==NULL)
+    {
+        printf("fail to open!");
+        exit(0);
+    }
+    fscanf(fp,"%d\n",&nv);//顶点个数
+    Graph=CreateGraph_matric(nv);//初始化有nv个顶点但没有边的图
+
+    fscanf(fp,"%d\n",&Graph->ne);//读入边数
+    if(Graph->ne!=0){
+        E=(Edge)malloc(sizeof(struct ENode));
+        for(i=0;i<Graph->ne;i++){
+            fscanf(fp,"%d %d %d\n",&E->v1,&E->v2,&E->weight);//读入边的信息
+            InsertEdge_matric(Graph,E);//把这条边插入矩阵信息中
+        }
+    }
+    //读入顶点的数据
+    for(i=0;i<Graph->nv;i++){
+        fscanf(fp,"%c",&Graph->data[i]);//读入A、B、C顶点的数据
+    }
+    return Graph;
+}
+
+//初始化有nv个顶点但没有边的图
+MGraph CreateGraph_matric(int nvNum){
+    Vertex v,w;
+    MGraph Graph;
+    //为这个图申请空间
+    Graph =(MGraph)malloc(sizeof(struct GNode));
+    Graph->nv=nvNum;
+    //边数设置为0，并且将各条边的间距设置成无穷大，表示不连接
+    Graph->ne=0;
+    for(v=0;v<Graph->nv;v++){
+        for(w=0;w<Graph->nv;w++){
+            Graph->G[v][w]=INFINITY;
+        }
+
+    }
+    return Graph;
+}
+
+//在矩阵中插入边
+void InsertEdge_matric(MGraph Graph,Edge E){
+    Graph->G[E->v1][E->v2]=E->weight;
+    Graph->G[E->v2][E->v1]=E->weight;
+}
+
+//建立邻接表的图
+LGraph biuldGraph_adjacencyList(){
+    LGraph Graph;
+    Edge E;
+    int nv,i;
+
+    FILE*fp;
+     if((fp=fopen("E://数据结构//图 实验//matric1.txt","r"))==NULL)
+    {
+        printf("fail to open!");
+        exit(0);
+    }
+    fscanf(fp,"%d\n",&nv);//顶点个数
+    Graph=CreateGraph_adjacencyList(nv);//初始化有nv个顶点但没有边的图
+
+    fscanf(fp,"%d\n",&Graph->ne);//读入边数
+    if(Graph->ne!=0){
+        E=(Edge)malloc(sizeof(struct ENode));
+        for(i=0;i<Graph->ne;i++){
+            fscanf(fp,"%d %d %d\n",&E->v1,&E->v2,&E->weight);//读入边的信息
+            InsertEdge_adjacencyList(Graph,E);//把这条边插入矩阵信息中
+        }
+    }
+    //读入顶点的数据
+    for(i=0;i<Graph->nv;i++){
+        fscanf(fp,"%c",&Graph->G[i].data);//读入A、B、C顶点的数据
+    }
+    return Graph;
+}
+
+//初始化有nv个顶点但没有边的图
+LGraph CreateGraph_adjacencyList(int nvNum){
+    Vertex v;
+    LGraph Graph;
+    //为这个图申请空间
+    Graph =(LGraph)malloc(sizeof(struct GNode));
+    Graph->nv=nvNum;
+    //边数设置为0，并且将各条边的间距设置成无穷大，表示不连接
+    Graph->ne=0;
+    for(v=0;v<Graph->nv;v++)
+        Graph->G[v].firstEdge=NULL;
+    return Graph;
+}
+
+//把这条边插入邻接表信息中
+void InsertEdge_adjacencyList(LGraph Graph,Edge E){
+    PtrToAdjvNode newnode;//定义一个表头结点
+    //建立一个v2邻接点
+    newnode=(PtrToAdjvNode)malloc(sizeof(struct AdjvNode));
+    newnode->Adjv=E->v2;
+    newnode->weight=E->weight;
+    //将v2插入v1表头
+    newnode->next=Graph->G[E->v1].firstEdge;
+    Graph->G[E->v1].firstEdge=newnode;
+}
+
+
+/*作用：邻接矩阵最小生成树
+使用变量：用dist[]来描述树外边的顶点到树的最短距离、用 Vcount刻画收录了多少个顶点、
+用parent[]描述，树外边的顶点到这棵树哪个顶点最近
+更新：每次访问完一个结点，Vcount，dist[]，parent都要更新*/
+LGraph Prim_matric(MGraph Graph){
+    LGraph MST;
+    weightType dist[MaxVertexNum],totalWeight=0;
+    Vertex parent[MaxVertexNum],i,j;
+    int Vcount=0;//开始没有收录任何顶点
+    Edge E;
+
+    //初始化，从0这个顶点开始访问
+    for(i=0;i<Graph->nv;i++){
+        dist[i]=Graph->G[0][i];
+        parent[i]=0;
+    }
+    dist[0]=0;//访问过的顶点，到这棵树的距离为0
+    Vcount++;
+    parent[0]=-1;//等于-1的是树根
+
+    //用邻接表来承接树的信息
+    //创建一个有顶点但是没有边的邻接表
+    MST=CreateGraph_adjacencyList(Graph->nv);
+    E=(Edge)malloc(sizeof(struct ENode));
+
+    //一直遍历完所有的结点
+    while(1){
+        //寻找树外的结点到树的最短距离
+        i=findMinDist_matric(Graph,dist);
+        if(i==ERROR)
+            break;
+        E->v1=parent[i];
+        E->v2=i;//连过去的结点
+        E->weight=dist[i];
+        InsertEdge_adjacencyList(MST,E);
+        totalWeight+=dist[i];
+        dist[i]=0;//标记成访问过
+        Vcount++;
+
+        //找是否能更新距离
+        for(j=0;j<Graph->nv;j++){
+            if(dist[j]!=0 &&Graph->G[i][j]<INFINITY){
+                //未被收录进树+有边
+                if(Graph->G[i][j]<dist[j]){
+                    dist[j]=Graph->G[i][j];
+                    parent[j]=i;
+                }
+            }
+        }
+    }
+        if(Vcount<Graph->nv){
+            totalWeight=ERROR;
+            printf("不是最小生成树\n");
+        }
+            printf("最小树的权值和%d\n",totalWeight);
+            return MST;
+}
+
+//寻找最小的权值点
+Vertex findMinDist_matric(MGraph Graph,weightType dist[]){
+    Vertex Minv,v;
+    weightType MinDist=INFINITY;
+
+    for(v=0;v<Graph->nv;v++){
+        if(dist[v]!=0 &&dist[v]<MinDist){
+            MinDist=dist[v];
+            //printf("最小值%d\n",MinDist);
+            Minv=v;
+        }
+    }
+
+    if(MinDist<INFINITY)
+        return Minv;
+    else return ERROR;
+}
+
+//邻接表的深度搜索递归
+void DFS_adjacencyList(LGraph Graph,Vertex v,void(*visit_)(Vertex)){
+    PtrToAdjvNode w;
+    visit_(v);
+    visited[v]=true;
+    for(w=Graph->G[v].firstEdge;w;w=w->next){
+        if(!visited[w->Adjv])//下一个顶点没有被访问
+            DFS_adjacencyList(Graph,w->Adjv,visit_);
+    }
+}
+
+//初始化访问tag
+void InitialVisted(){
+    int i;
+    for(i=0;i<MaxVertexNum;i++){
+        visited[i]=0;
+    }
+}
+
+void visit_(Vertex s){
+    printf("%d ",s);
+}
+
+/*创建一个容量为N的空的最小堆*/
+minHeap creatHeap(){
+    int i;
+    minHeap H=(minHeap)malloc(sizeof(struct HNode));
+    H->size=0;//当前的元素个数为0
+    H->capacity=MaxVertexNum;//最大的容量
+    for(i=0;i<MaxVertexNum;i++){
+        H->data[i]=(Edge)malloc(sizeof(struct ENode));
+    }
+    H->data[0]->weight=minData;//建立一个哨兵,小于堆中所有的元素
+    return H;
+}
+
+/*从图中读进边的信息*/
+void readFromFile(minHeap H,MGraph Graph){
+    int i,j,count=0;
+    for(i=0;i<Graph->nv;i++){
+        for(j=0;j<Graph->nv;j++){
+            if(Graph->G[i][j]<INFINITY && i<j){//如果有边，加入最小堆
+                count++;
+                H->data[count]->v1=i;
+                H->data[count]->v2=j;
+                H->data[count]->weight=Graph->G[i][j];
+            }
+        }
+    }
+    H->size=count;//开始的容量就是图的边
+}
+
+void biuldMinHeap(minHeap H){
+    /*假设所有的H->capacity个元素都存在了H->data[]中*/
+    int i;
+    //从最后一个结点的父节点开始，一直到根节点1
+    for(i=H->size/2;i>0;i--)
+        sortMin(H,i);
+}
+
+/*将H中以H->data[i]为根的子堆调整为最小堆*/
+void sortMin(minHeap H,int i){
+    int parent,child;
+    ElementType_stack x;
+    int y;
+    x=H->data[i];//取出该点的值
+    y=H->data[i]->weight;
+    for(parent=i;parent*2<=H->size;parent=child){
+        child=parent*2;//找到其中左儿子的位置
+        //指向两个儿子中较小的一个,并且如果没有右儿子，则不进行比较了
+        if(child!=H->size &&(H->data[child]->weight>H->data[child+1]->weight))
+            child++;
+        //已经可以进行比较parent和child
+        if(y < H->data[child]->weight) break;
+        else H->data[parent]=H->data[child];
+    }
+    H->data[parent]=x;
+    /*其实就是最后跟parent交换的儿子child,前边的child把值给了data[i]，child空出了一个位置，
+    并不着急马上 H->data[child]=H->data[parent]，因为现在只是要确定H->data[i]这个元素到底应该放在哪个位置上，
+    只要用前面已经取出的x去比较就好了*/
+}
+
+//取出栈顶元素，就是最小的元素，并且删除一个结点
+ElementType_stack deleteMin(minHeap H){
+    int parent,child,y;
+    ElementType_stack minItem,x;
+    if(H->size==0){
+        printf("最小堆是空的!\n");
+        //return ERROR;
+    }
+
+    //正常操作
+    minItem=H->data[1];//取出最小值，就是根
+    //要保证剩下的堆还是树
+    x=H->data[H->size];//元素减少，再取出最下层的元素
+    //重新排列顺序,为x（最后一个元素）找到合适的位置
+    y=H->data[H->size]->weight;
+    H->size--;
+    for(parent=1;parent*2<=H->size;parent=child){
+        child=parent*2;
+        if(child!=H->size &&(H->data[child]->weight>H->data[child+1]->weight))
+            child++;
+        if(y < H->data[child]->weight) break;
+        else H->data[parent]=H->data[child];
+    }
+    H->data[parent]=x;
+    return minItem;
+}
+
+/*初始化查并集*/
+void initialSet(setType s){
+    int i;
+    for(i=0;i<MaxVertexNum+1;i++){
+         s[i].parent=-1;
+         s[i].data=-2;
+    }
+
+}
+
+/*作用：查找元素,判断是不是同一棵树
+传入参数：查找的元素x,y的根位置,已经建立起来的双亲表示法的树s[]*/
+int Isclose(int x,int y,setType s){
+    int k;
+    printf("先查看查并集\n");
+    for(k=0;k<=MaxVertexNum;k++){
+        printf("%d  ",s[k].parent);
+    }
+    printf("\n");
+    for(k=0;k<=MaxVertexNum;k++){
+        printf("%d  ",k);
+    }
+    printf("\n");
+    int i;
+    //for(i=0;i<MaxVertexNum && s[i].data!=x;i++);
+    //printf("I ：%d\n",i);
+    for(;s[x].parent>=0;x=s[x].parent);
+    printf("x ：%d\n",x);
+    int j;
+    //for(j=0;j<MaxVertexNum && s[j].data!=y;j++);
+    for(;s[y].parent>=0;y=s[y].parent);
+    printf("y ：%d\n",y);
+    if(s[x].parent==-1 && s[y].parent==-1){
+        printf("执行返回0\n");
+        return 0;
+    }else{
+        return (x==y);
+    }
+
+}
+
+/*
+传入参数：已经创建好的邻接矩阵graph,已经创建好的边最小堆minHead
+思路：将边的权值排序（最小堆），把加入的边加入并查集，查询是否构成回路，判断能否加进图的构造中*/
+LGraph Kruskal(MGraph graph,minHeap H){
+    Edge E;
+    setType s;
+    int Ecount=0,weightcount=0;//收录边的统计
+    LGraph T;
+    T=(LGraph)malloc(sizeof(struct GNode_AL));//创建一个LGraph保存最小生成树
+    initialSet(s);//初始化查并集
+
+    printf("测试执行\n");
+    E=(Edge)malloc(sizeof(struct ENode));
+    while((Ecount<graph->ne-1) && (H->size>0)){
+        printf("%d\n",H->size);
+        E=deleteMin(H);//从最小堆中删除一个元素(边)
+        printf("E:%d %d %d\n",E->v1,E->v2,E->weight);
+        if(!Isclose(E->v1,E->v2,s)){
+            InsertEdge_adjacencyList(T,E);
+            weightcount+=E->weight;
+            //把这个值收进查并集
+            //不应该拿来做data！！s[Ecount].data=E->v2;
+            //s[Ecount].parent=E->v1;
+            s[E->v2].parent=E->v1;
+            Ecount++;
+        }
+        printf("Ecount:%d\n",Ecount);
+        printf("H->size:%d\n",H->size);
+    }
+    printf("Ecount:%d\n",Ecount);
+    if(Ecount!=graph->ne-1)
+        printf("不是最小生成树\n");
+    printf("最小权值和%d\n",weightcount);
+    return T;
+}
